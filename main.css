@@ -241,3 +241,23 @@ body {
 *::-webkit-scrollbar-track {
   background: transparent;
 }
+/* ===================== تبويبات ولوحات ===================== */
+.tabs {
+  display: flex;
+  gap: .5rem;
+  flex-wrap: wrap;
+}
+.tab{
+  padding:.5rem .9rem; cursor:pointer;
+  border:1px solid var(--border);
+  border-radius: var(--radius);
+  background: rgba(255,255,255,.05);
+  color: var(--base-fg);
+  transition: background var(--transition), color var(--transition), transform var(--transition);
+}
+.tab:hover{ transform: translateY(-1px); }
+.tab.active{ background: rgba(255,255,255,.15); }
+
+/* ✅ تثبيت الإظهار/الإخفاء بقوة */
+.panel{ display: none !important; opacity:0; transform: translateY(8px); transition: opacity var(--transition), transform var(--transition); }
+.panel.active{ display: block !important; opacity:1; transform: translateY(0); }
