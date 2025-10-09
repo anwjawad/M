@@ -107,6 +107,7 @@ window.APP_FORMS = (function(){
 
     // رسالة نجاح وإعادة التعيين
     UT.toast("تم الحفظ محليًا ✅");
+   document.dispatchEvent(new Event("data:changed"));
     resetTxForm();
   }
 
