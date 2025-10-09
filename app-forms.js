@@ -1,11 +1,10 @@
 /* ==========================================================================
    app-forms.js — مصروفي
-   النسخة: v0.1.1
+   النسخة: v0.1.2
    الغرض:
-   - إدارة نماذج الإدخال (Transactions) بأسلوب step-based.
-   - التحقق (Validation) الخفيف قبل الحفظ.
-   - حفظ محلي + دفع للأوفلاين كيو (Bulk Insert) بما يتوافق مع GAS.
-   - ✨ جديد: إطلاق حدث "data:changed" بعد كل حفظ لتمكين المزامنة التلقائية.
+   - نموذج المعاملة (Transactions) بأسلوب step-based.
+   - التحقق والحفظ المحلي + الطابور.
+   - جديد: ضبط إشارة المبلغ تلقائيًا حسب نوع الفئة (expense → سالب، income → موجب).
    ========================================================================== */
 
 window.APP_FORMS = (function(){
@@ -14,6 +13,8 @@ window.APP_FORMS = (function(){
   const btnNext = formTx?.querySelector('[data-action="next"]');
   const btnPrev = formTx?.querySelector('[data-action="prev"]');
   const steps   = formTx ? Array.from(formTx.querySelectorAll(".step")) : [];
+  const selCat  = formTx?.querySelector("[data-bind='transactions.category_id']");
+  const inpAmt  = formTx?.querySelector("[data-bind='transactions.amount']");
   let stepIndex = 0;
 
   function showStep(n){
@@ -21,9 +22,41 @@ window.APP_FORMS = (function(){
     stepIndex = Math.max(0, Math.min(steps.length - 1, n));
     steps.forEach((s, i)=> s.classList.toggle("active", i === stepIndex));
   }
-
   btnNext?.addEventListener("click", ()=> showStep(stepIndex + 1));
   btnPrev?.addEventListener("click", ()=> showStep(stepIndex - 1));
+
+  /* ===================== مساعد: نوع الفئة من الحالة ===================== */
+  function getCategoryById(id){
+    return (STATE.S.data.categories || []).find(c => String(c.id) === String(id));
+  }
+  function normalizeAmountByCategory(amount, category_id){
+    const cat = getCategoryById(category_id);
+    const n = Number(amount || 0);
+    if(!cat || isNaN(n)) return n;
+    if(cat.type === "expense") return Math.abs(n) * -1; // إجبار سالب
+    if(cat.type === "income")  return Math.abs(n);      // إجبار موجب
+    return n;
+  }
+
+  // عند تغيير الفئة: طبّق الإشارة فورًا لو في مبلغ مكتوب
+  selCat?.addEventListener("change", ()=>{
+    if(!inpAmt) return;
+    const raw = Number(inpAmt.value || 0);
+    const adjusted = normalizeAmountByCategory(raw, selCat.value);
+    if(!isNaN(adjusted) && adjusted !== raw){
+      inpAmt.value = adjusted;
+    }
+  });
+
+  // عند خروج المستخدم من خانة المبلغ: أعِد ضبط الإشارة حسب الفئة الحالية
+  inpAmt?.addEventListener("blur", ()=>{
+    if(!selCat) return;
+    const raw = Number(inpAmt.value || 0);
+    const adjusted = normalizeAmountByCategory(raw, selCat.value);
+    if(!isNaN(adjusted) && adjusted !== raw){
+      inpAmt.value = adjusted;
+    }
+  });
 
   /* ===================== جمع نموذج المعاملة ===================== */
   function collectTxModel(){
@@ -38,6 +71,10 @@ window.APP_FORMS = (function(){
       model[field] = v;
     });
     if(!model.id) model.id = UT.uid();
+
+    // ✨ ضبط الإشارة حسب نوع الفئة
+    model.amount = normalizeAmountByCategory(model.amount, model.category_id);
+
     return model;
   }
 
@@ -69,7 +106,7 @@ window.APP_FORMS = (function(){
       date: model.date,
       account_id: model.account_id || "",
       category_id: model.category_id,
-      amount: Number(model.amount||0),
+      amount: Number(model.amount||0), // أصبح مضبوط الإشارة مسبقًا
       note: model.note || "",
       tags: model.tags || "",
       is_recurring: model.is_recurring || "",
@@ -85,15 +122,11 @@ window.APP_FORMS = (function(){
     UT.queuePush({ op:"insert", table:"transactions", rows:[ row ]});
 
     // تحديث العرض
-    if(window.APP_DATA){
-      APP_DATA.renderTables?.();
-      APP_DATA.renderDashboard?.();
-    }
+    APP_DATA?.renderTables?.();
+    APP_DATA?.renderDashboard?.();
 
-    // إشعار نجاح
+    // إشعار نجاح + مزامنة تلقائية
     UT.toast("تم الحفظ محليًا ✅");
-
-    // ✨ إطلاق حدث يُعلِم النظام أن البيانات تغيّرت (Auto Sync سيلتقطه)
     document.dispatchEvent(new Event("data:changed"));
 
     // إعادة تعيين
