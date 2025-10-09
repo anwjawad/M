@@ -1,11 +1,12 @@
 /* ==========================================================================
    app-sync.js — مصروفي
-   النسخة: v0.1.0
+   النسخة: v0.1.1
    الغرض:
    - مزامنة سريعة وآمنة مع Google Sheets عبر GAS Web App.
    - خطوات المزامنة: ensureSchema → دفع الطابور (bulk) → قراءة دفعة واحدة.
    - دعم وضع الأوفلاين (Queue) وعدم فقدان البيانات.
    - تسجيل Service Worker (للكاش الأساسي) بدون تعارض مع GitHub Pages.
+   - ✨ جديد v0.1.1: مزامنة تلقائية ذكية (Auto Sync) تعمل بالخلفية.
    ========================================================================== */
 
 window.APP_SYNC = (function(){
@@ -24,21 +25,26 @@ window.APP_SYNC = (function(){
     return grouped;
   }
 
+  // قفل بسيط لمنع تشغيل مزامنتين بالتوازي
+  let _syncLock = false;
+
   /**
    * محاولة مزامنة كاملة الآن.
    * - إذا لم يكن هناك gasUrl أو كنا أوفلاين → رسالة مناسبة فقط.
    * - أي خطأ في خطوة لا يمنع حفظ البيانات المحلية.
    */
-  async function syncNow(){
+  async function syncNow({silent=false} = {}){
+    if(_syncLock) return false;
     if(!APP_CONFIG.gasUrl){
-      UT.toast("ضع رابط GAS في الإعدادات أولًا","error");
+      if(!silent) UT.toast("ضع رابط GAS في الإعدادات أولًا","error");
       return false;
     }
     if(!UT.isOnline()){
-      UT.toast("لا يوجد اتصال—سيتم المزامنة لاحقًا","error");
+      if(!silent) UT.toast("لا يوجد اتصال—سيتم المزامنة لاحقًا","error");
       return false;
     }
 
+    _syncLock = true;
     try{
       // 1) تأكد من المخطط في Google Sheets
       const sch = await UT.fetchGAS("ensureSchema", {});
@@ -57,13 +63,14 @@ window.APP_SYNC = (function(){
       // 3) اقرأ دفعة واحدة لتحديث الحالة المحلية
       await APP_DATA.readBatch();
 
-      UT.toast("المزامنة مكتملة ✅");
+      if(!silent) UT.toast("المزامنة مكتملة ✅");
       return true;
 
-    }catch(err){
-      // لا نستخدم console.log في الإصدار النهائي؛ نظهر رسالة فقط.
-      UT.toast("فشل المزامنة ❌","error");
+    }catch(_err){
+      if(!silent) UT.toast("فشل المزامنة ❌","error");
       return false;
+    } finally {
+      _syncLock = false;
     }
   }
 
@@ -73,34 +80,55 @@ window.APP_SYNC = (function(){
     // نسجل SW نسبيًا ليتوافق مع GitHub Pages
     navigator.serviceWorker.register("./sw.js").catch(function(){ /* تجاهل */ });
   }
-/* ===================== Auto Sync (Smart Background) ===================== */
-(function(){
-  let autoSyncTimer = null;
-  const AUTO_SYNC_INTERVAL = 1000 * 60 * 3; // كل 3 دقائق
 
-  async function tryAutoSync(){
-    if(!UT.isOnline()) return; // فقط عند الاتصال
+  /* ===================== تعريض الواجهة ===================== */
+  return { syncNow };
+})();
+
+/* ===================== Auto Sync (Smart Background) ===================== */
+/**
+ * مزامنة تلقائية ذكية:
+ * - عند عودة الاتصال بالإنترنت.
+ * - بعد كل تغيير بيانات محلي (حدث "data:changed").
+ * - كل 3 دقائق بشكل هادئ (silent) لتحديث الحالة حتى بدون طابور.
+ */
+(function(){
+  const AUTO_SYNC_INTERVAL = 1000 * 60 * 3; // كل 3 دقائق
+  let autoSyncTimer = null;
+  let _cooldown = false;
+
+  async function tryAutoSync({force=false} = {}){
+    if(!APP_CONFIG.gasUrl) return;
+    if(!UT.isOnline()) return;
+
+    // تبريد بسيط لمنع تكرار شديد
+    if(_cooldown && !force) return;
+    _cooldown = true;
+    setTimeout(()=>{ _cooldown = false; }, 4000);
+
     const queue = UT.queueAll();
     if(queue.length > 0){
-      await APP_SYNC.syncNow(); // إرسال دفعة واحدة
-    } else {
-      // حتى بدون طابور، نعمل مزامنة خفيفة لجلب آخر تحديث
-      await APP_DATA.readBatch();
+      // إرسال دفعة واحدة — إظهار صامت
+      await APP_SYNC.syncNow({silent:true});
+    }else{
+      // بدون طابور: تحديث خفيف للبيانات من الشيت
+      try{
+        await APP_DATA.readBatch();
+      }catch(_){ /* تجاهل */ }
     }
   }
 
   // مزامنة عند استعادة الاتصال بالإنترنت
-  window.addEventListener("online", tryAutoSync);
+  window.addEventListener("online", ()=> tryAutoSync({force:true}));
 
-  // مزامنة تلقائية بعد كل حفظ جديد
-  document.addEventListener("data:changed", tryAutoSync);
+  // مزامنة تلقائية بعد كل حفظ جديد (الواجهة تطلق حدث data:changed)
+  document.addEventListener("data:changed", ()=> tryAutoSync());
 
-  // مزامنة مجدولة كل عدة دقائق
-  autoSyncTimer = setInterval(tryAutoSync, AUTO_SYNC_INTERVAL);
+  // مزامنة مجدولة صامتة كل عدة دقائق
+  autoSyncTimer = setInterval(()=> tryAutoSync(), AUTO_SYNC_INTERVAL);
 
-  // ملاحظة: لا تُعرض أي توستات في الخلفية، فقط في المزامنة اليدوية
-})();
-
-  /* ===================== تعريض الواجهة ===================== */
-  return { syncNow };
+  // محاولة أولى عند تحميل الصفحة إذا توفّر URL
+  if(APP_CONFIG.gasUrl && UT.isOnline()){
+    tryAutoSync({force:true});
+  }
 })();
