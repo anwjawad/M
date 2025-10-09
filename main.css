@@ -1,10 +1,10 @@
 /* ==========================================================================
    main.css — مصروفي
-   النسخة: v0.1.0
+   النسخة: v0.1.2
    ملاحظات:
-   - يعتمد على متغيرات CSS للتحكم بالألوان والحركات.
-   - يدعم RTL بشكل افتراضي (dir="rtl" في index.html).
-   - متوافق مع GitHub Pages (روابط نسبية).
+   - تحسين التباين داخل المودالات: خلفية داكنة شبه معتمة + نص أبيض واضح.
+   - يطبَّق على كل المودالات (Settings/Account/Category) بما يضمن وضوح النص.
+   - يدعم RTL، ومتوافق مع GitHub Pages.
    ========================================================================== */
 
 /* متغيرات عامة */
@@ -98,7 +98,7 @@ a:hover{ opacity:.85; }
   border-radius: var(--radius);
   background: rgba(255,255,255,.02);
   color: var(--base-fg);
-  transition: border-color var(--transition), background var(--transition);
+  transition: border-color var(--transition), background var(--transition), color var(--transition);
 }
 .input:focus{
   outline:none;
@@ -131,9 +131,7 @@ a:hover{ opacity:.85; }
 }
 
 /* ===================== تبويبات ولوحات ===================== */
-.tabs{
-  display:flex; gap:.5rem; flex-wrap:wrap;
-}
+.tabs{ display:flex; gap:.5rem; flex-wrap:wrap; }
 .tab{
   padding:.5rem .9rem; cursor:pointer;
   border:1px solid var(--border);
@@ -152,9 +150,7 @@ a:hover{ opacity:.85; }
 
 /* خطوات النماذج (step-based) */
 .steps .step{ display:none; }
-.steps .step.active{
-  display:block; animation: fadeSlide var(--transition) ease;
-}
+.steps .step.active{ display:block; animation: fadeSlide var(--transition) ease; }
 
 /* ===================== حركات/أنيميشن ===================== */
 @keyframes fadeSlide{
@@ -163,25 +159,42 @@ a:hover{ opacity:.85; }
 }
 
 /* ===================== مودالات (dialog) ===================== */
-/* ملاحظة: نستخدم <dialog> الأصلي مع تنسيقات بسيطة */
+/* الخلفية الباهتة */
 .modal{
   border:none; padding:0; margin:auto;
   background: transparent;
 }
 .modal::backdrop{
-  background: rgba(0,0,0,.4);
+  background: rgba(0,0,0,.55);     /* أغمق لزيادة التباين مع المحتوى */
   backdrop-filter: blur(2px);
 }
+
+/* الصندوق الداخلي للمودال — تباين عالٍ */
 .modal-box{
   width:min(720px, 92vw);
   padding:1rem;
-  border:1px solid var(--border);
+  border:1px solid rgba(255,255,255,0.09);
   border-radius: var(--radius);
-  background: rgba(20,20,30,.95);
-  color: var(--base-fg);
-  box-shadow: var(--shadow);
+  background: rgba(12,12,18,0.96); /* ✨ خلفية داكنة شبه معتمة */
+  color: #f8fafc;                  /* ✨ نص أبيض واضح */
+  box-shadow: 0 16px 40px rgba(0,0,0,.45);
   animation: pop var(--transition) ease;
 }
+
+/* مدخلات داخل المودال — درجات أفتح بقليل لراحة القراءة */
+.modal-box .input{
+  background: rgba(255,255,255,0.08);
+  border-color: rgba(255,255,255,0.20);
+  color: #fff;
+}
+.modal-box .input::placeholder{
+  color: rgba(255,255,255,0.75);
+}
+.modal-box label span,
+.modal-box h3, .modal-box h4{
+  color: #ffffff;
+}
+
 @keyframes pop{
   from{ transform: translateY(6px) scale(.98); opacity:0; }
   to  { transform: translateY(0)   scale(1);    opacity:1; }
@@ -251,7 +264,7 @@ a:hover{ opacity:.85; }
   padding:.35rem .7rem; border-radius:10px;
 }
 
-/* ===================== تصحيح بعض الألوان مع الثيمات الفاتحة (لو حدثت) ===================== */
+/* ===================== دعم وضع الفاتح (اختياري) ===================== */
 @media (prefers-color-scheme: light){
   .theme-neon .modal-box,
   .theme-ocean .modal-box,
@@ -259,6 +272,21 @@ a:hover{ opacity:.85; }
   .theme-mint .modal-box{
     background: rgba(255,255,255,.98);
     color: #111827;
+    border-color: rgba(0,0,0,0.08);
+  }
+  .theme-neon .modal-box .input,
+  .theme-ocean .modal-box .input,
+  .theme-rose .modal-box .input,
+  .theme-mint .modal-box .input{
+    background: rgba(0,0,0,0.04);
+    color: #111827;
+    border-color: rgba(0,0,0,0.12);
+  }
+  .theme-neon .modal::backdrop,
+  .theme-ocean .modal::backdrop,
+  .theme-rose .modal::backdrop,
+  .theme-mint .modal::backdrop{
+    background: rgba(0,0,0,.35);
   }
 }
 
