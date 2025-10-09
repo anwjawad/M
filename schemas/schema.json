@@ -1,12 +1,13 @@
 {
   "version": "1.0",
+  "description": "مصدر الحقيقة لهيكل البيانات وربط الحقول بالواجهات. يُستخدم لضمان ثبات الحقول ومنع تغيير مواقعها بين التبويبات.",
   "tables": {
-    "accounts": ["id","name","type","currency","opening_balance"],
-    "categories": ["id","name","type","parent_id"],
-    "transactions": ["id","date","account_id","category_id","amount","note","tags","is_recurring","receipt_url","project_id"],
-    "budgets": ["id","month","category_id","amount"],
-    "projects": ["id","name","type"],
-    "subscriptions": ["id","name","amount","cycle","next_due"]
+    "accounts": ["id", "name", "type", "currency", "opening_balance"],
+    "categories": ["id", "name", "type", "parent_id"],
+    "transactions": ["id", "date", "account_id", "category_id", "amount", "note", "tags", "is_recurring", "receipt_url", "project_id"],
+    "budgets": ["id", "month", "category_id", "amount"],
+    "projects": ["id", "name", "type"],
+    "subscriptions": ["id", "name", "amount", "cycle", "next_due"]
   },
   "bindings": {
     "transactions.date": "input[name='tx-date']",
@@ -16,5 +17,48 @@
     "transactions.note": "input[name='tx-note']",
     "transactions.project_id": "select[name='tx-project']",
     "transactions.tags": "input[name='tx-tags']"
-  }
+  },
+  "constraints": {
+    "transactions.amount": { "type": "number", "required": true },
+    "transactions.date": { "type": "date", "required": true },
+    "transactions.category_id": { "type": "string", "required": true }
+  },
+  "seeds": {
+    "accounts": [
+      { "id": "acc-cash", "name": "Cash", "type": "cash", "currency": "ILS", "opening_balance": 0 },
+      { "id": "acc-card", "name": "Card", "type": "card", "currency": "ILS", "opening_balance": 0 }
+    ],
+    "categories": [
+      { "id": "cat-salary", "name": "Salary", "type": "income", "parent_id": "" },
+      { "id": "cat-freelance", "name": "Freelance", "type": "income", "parent_id": "" },
+      { "id": "cat-donations", "name": "Donations", "type": "income", "parent_id": "" },
+      { "id": "cat-rent", "name": "Rent", "type": "expense", "parent_id": "" },
+      { "id": "cat-grocery", "name": "Grocery", "type": "expense", "parent_id": "" },
+      { "id": "cat-utilities", "name": "Utilities", "type": "expense", "parent_id": "" },
+      { "id": "cat-internet", "name": "Internet", "type": "expense", "parent_id": "cat-utilities" },
+      { "id": "cat-mobile", "name": "Mobile", "type": "expense", "parent_id": "cat-utilities" },
+      { "id": "cat-transport", "name": "Transport", "type": "expense", "parent_id": "" },
+      { "id": "cat-fuel", "name": "Fuel", "type": "expense", "parent_id": "cat-transport" },
+      { "id": "cat-health", "name": "Health", "type": "expense", "parent_id": "" },
+      { "id": "cat-meds", "name": "Medicine", "type": "expense", "parent_id": "cat-health" },
+      { "id": "cat-gear", "name": "Gear/Equipment", "type": "expense", "parent_id": "" },
+      { "id": "cat-software", "name": "Software", "type": "expense", "parent_id": "" },
+      { "id": "cat-ads", "name": "Ads/Marketing", "type": "expense", "parent_id": "" },
+      { "id": "cat-fees", "name": "Fees/Commissions", "type": "expense", "parent_id": "" }
+    ],
+    "projects": [
+      { "id": "prj-personal", "name": "Personal", "type": "personal" },
+      { "id": "prj-photo", "name": "Photography", "type": "business" },
+      { "id": "prj-stream", "name": "Streaming", "type": "business" }
+    ],
+    "subscriptions": [
+      { "id": "sub-adobe", "name": "Adobe CC", "amount": -89.0, "cycle": "M", "next_due": "" },
+      { "id": "sub-chatgpt", "name": "ChatGPT Plus", "amount": -20.0, "cycle": "M", "next_due": "" }
+    ]
+  },
+  "notes": [
+    "يجب أن تتوافق أعمدة كل ورقة في Google Sheets مع المصفوفة المناظرة في tables.",
+    "أي حقل جديد يُضاف عبر ensureSchema فقط لضمان التطابق وعدم فقدان بيانات.",
+    "bindings تُستخدم لضمان ثبات الربط بين حقول الواجهة وحقول الجداول."
+  ]
 }
