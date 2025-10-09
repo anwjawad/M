@@ -1,0 +1,29 @@
+:root {
+  /* الألوان الأساسية للثيم الافتراضي */
+  --color-bg: #0a0a0a;
+  --color-text: #f1f1f1;
+  --color-primary: #00d4ff;
+  --color-accent: #ff00a8;
+  --transition-speed: 400ms;
+
+  /* ألوان الثيمات */
+  --theme-neon-bg: #050505;
+  --theme-neon-primary: #00f0ff;
+  --theme-neon-accent: #ff00b3;
+
+  --theme-ocean-bg: #021c28;
+  --theme-ocean-primary: #00bcd4;
+  --theme-ocean-accent: #00e5ff;
+
+  --theme-rose-bg: #2a0d1c;
+  --theme-rose-primary: #ff4081;
+  --theme-rose-accent: #ff80ab;
+
+  --theme-mint-bg: #032d28;
+  --theme-mint-primary: #00e0a1;
+  --theme-mint-accent: #00ffcc;
+
+  /* الخطوط */
+  --font-arabic: 'Cairo', sans-serif;
+  --font-latin: 'Inter', sans-serif;
+}
