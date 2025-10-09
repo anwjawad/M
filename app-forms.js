@@ -1,11 +1,11 @@
 /* ==========================================================================
    app-forms.js — مصروفي
-   النسخة: v0.1.0
+   النسخة: v0.1.1
    الغرض:
-   - إدارة نماذج الإدخال (حاليًا: معاملات Transactions) بأسلوب step-based.
+   - إدارة نماذج الإدخال (Transactions) بأسلوب step-based.
    - التحقق (Validation) الخفيف قبل الحفظ.
-   - دفع العملية إلى الطابور الأوفلاين ثم تحديث العرض.
-   - فصل منطق الأعمال عن DOM بقدر الممكن (يبقى الربط هنا فقط).
+   - حفظ محلي + دفع للأوفلاين كيو (Bulk Insert) بما يتوافق مع GAS.
+   - ✨ جديد: إطلاق حدث "data:changed" بعد كل حفظ لتمكين المزامنة التلقائية.
    ========================================================================== */
 
 window.APP_FORMS = (function(){
@@ -29,32 +29,30 @@ window.APP_FORMS = (function(){
   function collectTxModel(){
     // الثبات مضمون عبر data-bind="transactions.<field>"
     const model = {};
+    if(!formTx) return model;
     formTx.querySelectorAll("[data-bind^='transactions.']").forEach(el=>{
       const [, field] = el.getAttribute("data-bind").split(".");
       let v = el.value;
-      // تنميط مبسط
       if(field === "amount"){ v = Number(v); }
       if(field === "tags"){ v = String(v||"").trim(); }
       model[field] = v;
     });
-    // إضافة id إن لم يوجد
     if(!model.id) model.id = UT.uid();
     return model;
   }
 
   /* ===================== تحقق أساسي ===================== */
   function validateTx(model){
-    // حقول مطلوبة: date, category_id, amount
     if(!model.date) return "التاريخ مطلوب";
     if(!model.category_id) return "الفئة مطلوبة";
     if(model.amount === undefined || model.amount === null || isNaN(Number(model.amount))) return "المبلغ غير صالح";
-    return null; // صالح
+    return null;
   }
 
   /* ===================== إعادة تعيين النموذج ===================== */
   function resetTxForm(){
+    if(!formTx) return;
     formTx.reset?.();
-    // أبقِ القوائم كما هي؛ فقط أفرغ حقول النص/الأرقام
     formTx.querySelectorAll("input[type='text'], input[type='number'], input[type='date']").forEach(i=> i.value = "");
     showStep(0);
   }
@@ -62,14 +60,11 @@ window.APP_FORMS = (function(){
   /* ===================== تقديم النموذج ===================== */
   async function submitTxForm(){
     if(!formTx) return;
-    // اجمع
     const model = collectTxModel();
-    // تحقق
     const err = validateTx(model);
     if(err){ UT.toast(err, "error"); return; }
 
-    // ضف محليًا (in-memory + localStorage)
-    STATE.S.data.transactions.push({
+    const row = {
       id: model.id,
       date: model.date,
       account_id: model.account_id || "",
@@ -80,24 +75,14 @@ window.APP_FORMS = (function(){
       is_recurring: model.is_recurring || "",
       receipt_url: model.receipt_url || "",
       project_id: model.project_id || ""
-    });
+    };
+
+    // حفظ محلي
+    STATE.S.data.transactions.push(row);
     STATE.saveLocal();
 
-    // صفّ العملية للكتابة على Google Sheets (batch insert: transactions)
-    UT.queuePush({ op:"insert", table:"transactions", rows:[
-      {
-        id: model.id,
-        date: model.date,
-        account_id: model.account_id || "",
-        category_id: model.category_id,
-        amount: Number(model.amount||0),
-        note: model.note || "",
-        tags: model.tags || "",
-        is_recurring: model.is_recurring || "",
-        receipt_url: model.receipt_url || "",
-        project_id: model.project_id || ""
-      }
-    ]});
+    // صفّ العملية للكتابة الدُفعية
+    UT.queuePush({ op:"insert", table:"transactions", rows:[ row ]});
 
     // تحديث العرض
     if(window.APP_DATA){
@@ -105,9 +90,13 @@ window.APP_FORMS = (function(){
       APP_DATA.renderDashboard?.();
     }
 
-    // رسالة نجاح وإعادة التعيين
+    // إشعار نجاح
     UT.toast("تم الحفظ محليًا ✅");
-   document.dispatchEvent(new Event("data:changed"));
+
+    // ✨ إطلاق حدث يُعلِم النظام أن البيانات تغيّرت (Auto Sync سيلتقطه)
+    document.dispatchEvent(new Event("data:changed"));
+
+    // إعادة تعيين
     resetTxForm();
   }
 
