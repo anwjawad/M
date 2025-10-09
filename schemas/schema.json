@@ -1,0 +1,20 @@
+{
+  "version": "1.0",
+  "tables": {
+    "accounts": ["id","name","type","currency","opening_balance"],
+    "categories": ["id","name","type","parent_id"],
+    "transactions": ["id","date","account_id","category_id","amount","note","tags","is_recurring","receipt_url","project_id"],
+    "budgets": ["id","month","category_id","amount"],
+    "projects": ["id","name","type"],
+    "subscriptions": ["id","name","amount","cycle","next_due"]
+  },
+  "bindings": {
+    "transactions.date": "input[name='tx-date']",
+    "transactions.account_id": "select[name='tx-account']",
+    "transactions.category_id": "select[name='tx-category']",
+    "transactions.amount": "input[name='tx-amount']",
+    "transactions.note": "input[name='tx-note']",
+    "transactions.project_id": "select[name='tx-project']",
+    "transactions.tags": "input[name='tx-tags']"
+  }
+}
