@@ -73,6 +73,33 @@ window.APP_SYNC = (function(){
     // نسجل SW نسبيًا ليتوافق مع GitHub Pages
     navigator.serviceWorker.register("./sw.js").catch(function(){ /* تجاهل */ });
   }
+/* ===================== Auto Sync (Smart Background) ===================== */
+(function(){
+  let autoSyncTimer = null;
+  const AUTO_SYNC_INTERVAL = 1000 * 60 * 3; // كل 3 دقائق
+
+  async function tryAutoSync(){
+    if(!UT.isOnline()) return; // فقط عند الاتصال
+    const queue = UT.queueAll();
+    if(queue.length > 0){
+      await APP_SYNC.syncNow(); // إرسال دفعة واحدة
+    } else {
+      // حتى بدون طابور، نعمل مزامنة خفيفة لجلب آخر تحديث
+      await APP_DATA.readBatch();
+    }
+  }
+
+  // مزامنة عند استعادة الاتصال بالإنترنت
+  window.addEventListener("online", tryAutoSync);
+
+  // مزامنة تلقائية بعد كل حفظ جديد
+  document.addEventListener("data:changed", tryAutoSync);
+
+  // مزامنة مجدولة كل عدة دقائق
+  autoSyncTimer = setInterval(tryAutoSync, AUTO_SYNC_INTERVAL);
+
+  // ملاحظة: لا تُعرض أي توستات في الخلفية، فقط في المزامنة اليدوية
+})();
 
   /* ===================== تعريض الواجهة ===================== */
   return { syncNow };
