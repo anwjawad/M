@@ -1,0 +1,277 @@
+/* ==========================================================================
+   main.css — مصروفي
+   النسخة: v0.1.0
+   ملاحظات:
+   - يعتمد على متغيرات CSS للتحكم بالألوان والحركات.
+   - يدعم RTL بشكل افتراضي (dir="rtl" في index.html).
+   - متوافق مع GitHub Pages (روابط نسبية).
+   ========================================================================== */
+
+/* متغيرات عامة */
+:root{
+  --radius: 14px;
+  --shadow: 0 10px 30px rgba(0,0,0,.08);
+  --transition: 300ms; /* تُعدل من Preferences */
+  --font: "Tajawal", system-ui, -apple-system, Segoe UI, Roboto, "Noto Naskh Arabic", sans-serif;
+
+  /* ألوان افتراضية (يتم استبدالها حسب الثيم) */
+  --base:#0e0e14;
+  --base-fg:#f7f7ff;
+  --accent:#7c3aed;
+  --accent-2:#06b6d4;
+  --border:#24243a;
+
+  /* طبقات */
+  --z-modal: 60;
+  --z-toast: 70;
+}
+
+/* ========================= ثيمات ========================= */
+.theme-neon { --base:#0e0e14; --base-fg:#f7f7ff; --accent:#7c3aed; --accent-2:#06b6d4; --border:#24243a; }
+.theme-ocean{ --base:#0b132b; --base-fg:#e0f2fe; --accent:#3a86ff; --accent-2:#00b4d8; --border:#1c2541; }
+.theme-rose { --base:#1f0d12; --base-fg:#ffe4e6; --accent:#f43f5e; --accent-2:#fb7185; --border:#3b1a24; }
+.theme-mint { --base:#0d1f1a; --base-fg:#d1fae5; --accent:#34d399; --accent-2:#10b981; --border:#163228; }
+
+/* ===================== أساسيات الصفحة ===================== */
+html,body{ height:100%; }
+body{
+  background: var(--base);
+  color: var(--base-fg);
+  font-family: var(--font);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* أدوات بسيطة لاستخدامها مع Tailwind عند الحاجة */
+.bg-base{ background: var(--base) !important; }
+.text-base-fg{ color: var(--base-fg) !important; }
+.border-border{ border-color: var(--border) !important; }
+
+/* روابط */
+a{ color: var(--accent); text-decoration: none; transition: opacity var(--transition); }
+a:hover{ opacity:.85; }
+
+/* ===================== بطاقات وجداول ومدخلات ===================== */
+.card{
+  padding:1rem;
+  border:1px solid var(--border);
+  border-radius: var(--radius);
+  background: rgba(255,255,255,.02);
+  box-shadow: var(--shadow);
+}
+
+/* الأزرار */
+.btn, .btn-primary, .btn-danger, .btn-ghost{
+  appearance:none;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  gap:.4rem;
+  padding:.6rem 1rem;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--base-fg);
+  transition: transform var(--transition), opacity var(--transition), background var(--transition), filter var(--transition);
+  cursor: pointer;
+  font-weight: 500;
+}
+.btn:hover{ transform: translateY(-1px); }
+.btn:active{ transform: translateY(0); filter: brightness(.95); }
+
+.btn-primary{
+  background: linear-gradient(135deg,var(--accent),var(--accent-2));
+  border: none; color: #fff;
+}
+.btn-danger{
+  background: linear-gradient(135deg,#ef4444,#b91c1c);
+  border: none; color: #fff;
+}
+.btn-ghost{ opacity:.9; }
+.btn-ghost:hover{ opacity:1; }
+
+/* مدخلات */
+.input{
+  width:100%;
+  padding:.6rem .8rem;
+  border:1px solid var(--border);
+  border-radius: var(--radius);
+  background: rgba(255,255,255,.02);
+  color: var(--base-fg);
+  transition: border-color var(--transition), background var(--transition);
+}
+.input:focus{
+  outline:none;
+  border-color: var(--accent);
+  background: rgba(255,255,255,.04);
+}
+
+/* جداول */
+.table{
+  width:100%;
+  border:1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: rgba(255,255,255,.02);
+}
+.table th, .table td{
+  padding:.6rem .8rem;
+  border-bottom:1px solid var(--border);
+  text-align: start;
+  white-space: nowrap;
+}
+.table thead th{
+  background: rgba(255,255,255,.04);
+  font-weight:600;
+}
+
+/* جعل الجداول قابلة للتمرير أفقياً على الشاشات الضيقة */
+@media (max-width: 640px){
+  .table{ display:block; overflow-x:auto; }
+}
+
+/* ===================== تبويبات ولوحات ===================== */
+.tabs{
+  display:flex; gap:.5rem; flex-wrap:wrap;
+}
+.tab{
+  padding:.5rem .9rem; cursor:pointer;
+  border:1px solid var(--border);
+  border-radius: var(--radius);
+  background: rgba(255,255,255,.02);
+  transition: background var(--transition), color var(--transition), transform var(--transition);
+}
+.tab:hover{ transform: translateY(-1px); }
+.tab.active{ background: rgba(255,255,255,.06); }
+
+.panel{
+  display:none; opacity:0; transform: translateY(8px);
+  transition: opacity var(--transition), transform var(--transition);
+}
+.panel.active{ display:block; opacity:1; transform: translateY(0); }
+
+/* خطوات النماذج (step-based) */
+.steps .step{ display:none; }
+.steps .step.active{
+  display:block; animation: fadeSlide var(--transition) ease;
+}
+
+/* ===================== حركات/أنيميشن ===================== */
+@keyframes fadeSlide{
+  from{ opacity:0; transform: translateX(12px); }
+  to  { opacity:1; transform: translateX(0); }
+}
+
+/* ===================== مودالات (dialog) ===================== */
+/* ملاحظة: نستخدم <dialog> الأصلي مع تنسيقات بسيطة */
+.modal{
+  border:none; padding:0; margin:auto;
+  background: transparent;
+}
+.modal::backdrop{
+  background: rgba(0,0,0,.4);
+  backdrop-filter: blur(2px);
+}
+.modal-box{
+  width:min(720px, 92vw);
+  padding:1rem;
+  border:1px solid var(--border);
+  border-radius: var(--radius);
+  background: rgba(20,20,30,.95);
+  color: var(--base-fg);
+  box-shadow: var(--shadow);
+  animation: pop var(--transition) ease;
+}
+@keyframes pop{
+  from{ transform: translateY(6px) scale(.98); opacity:0; }
+  to  { transform: translateY(0)   scale(1);    opacity:1; }
+}
+
+/* ===================== توست/إشعارات ===================== */
+#toasts{
+  position: fixed; inset-inline-end:1rem; inset-block-end:1rem;
+  display:flex; flex-direction:column; gap:.6rem;
+  z-index: var(--z-toast);
+}
+.toast{
+  padding:.7rem 1rem;
+  border-radius:12px;
+  background:#111827;
+  color:#fff;
+  border:1px solid #1f2937;
+  box-shadow: var(--shadow);
+  transition: opacity var(--transition), transform var(--transition);
+}
+
+/* ===================== عناصر مساعدة ===================== */
+.grow{ flex:1 1 auto; }
+
+/* فواصل وخصائص RTL */
+[dir="rtl"] .ms-4{ margin-inline-start:1rem; }
+
+/* عناوين داخل البطاقات */
+.card h3, .card h4{ font-weight:700; }
+
+/* ===================== تحسينات لمس/محمول ===================== */
+@media (hover:none){
+  .btn:hover{ transform:none; }
+  .tab:hover{ transform:none; }
+}
+
+/* ===================== حالات تركيز/وصولية ===================== */
+:focus-visible{
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 10px;
+}
+
+/* ===================== أدوات ألوان إضافية ===================== */
+.badge{
+  display:inline-block; padding:.2rem .5rem;
+  border-radius:10px; background: rgba(255,255,255,.06); border:1px solid var(--border);
+}
+
+/* ===================== تخصيص بسيط للـ scrollbar ===================== */
+*{
+  scrollbar-width: thin;
+  scrollbar-color: var(--accent) transparent;
+}
+*::-webkit-scrollbar{ height:10px; width:10px; }
+*::-webkit-scrollbar-thumb{
+  background: linear-gradient(135deg,var(--accent),var(--accent-2));
+  border-radius: 8px;
+}
+*::-webkit-scrollbar-track{ background: transparent; }
+
+/* ===================== عناصر مخصصة للوحة التقارير ===================== */
+#report-out .card{ background: rgba(255,255,255,.03); }
+
+/* ===================== حواف الأزرار في الجداول ===================== */
+.table .btn{
+  padding:.35rem .7rem; border-radius:10px;
+}
+
+/* ===================== تصحيح بعض الألوان مع الثيمات الفاتحة (لو حدثت) ===================== */
+@media (prefers-color-scheme: light){
+  .theme-neon .modal-box,
+  .theme-ocean .modal-box,
+  .theme-rose .modal-box,
+  .theme-mint .modal-box{
+    background: rgba(255,255,255,.98);
+    color: #111827;
+  }
+}
+
+/* ===================== كلاس مساعد لخلفيات شفافة ===================== */
+.bg-glass{
+  background: rgba(255,255,255,.04);
+  backdrop-filter: blur(4px);
+}
+
+/* ===================== تصحيح قياسات صور الأيقونة ===================== */
+img[alt="logo"]{ display:block; }
+
+/* ===================== حماية النص من الانكسار غير المرغوب ===================== */
+.nowrap{ white-space: nowrap; }
+
+/* ===================== نهاية الملف ===================== */
