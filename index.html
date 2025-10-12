@@ -5,18 +5,15 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>مصروفاتي</title>
 
-  <!-- Tailwind CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
-  <!-- Chart.js -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
-  <!-- Cairo font -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;600;800&display=swap" rel="stylesheet">
 
   <style>
-    :root { --bg:#0b1220; --card:#111b2e; --text:#e6edf6; --muted:#9fb2c7; --accent:#4ea0ff; --ok:#10b981; --warn:#f59e0b; --bad:#ef4444; }
+    :root { --bg:#0b1220; --card:#111b2e; --text:#e6edf6; --muted:#9fb2c7; --accent:#4ea0ff; --ok:#10b981; --bad:#ef4444; }
     .theme-ocean { --bg:#06141f; --card:#0b2536; --text:#e2f3ff; --muted:#94b8d6; --accent:#2ec5ff; }
     .theme-mint  { --bg:#061a14; --card:#0b2e24; --text:#e2fff6; --muted:#9ad4c2; --accent:#2ee6a6; }
     .theme-neon  { --bg:#0a0a0f; --card:#121225; --text:#f1f1ff; --muted:#a6a6ff; --accent:#7c3aed; }
@@ -150,11 +147,11 @@
   </div>
 
 <script>
-  // ========= Config =========
-  const GAS_URL = 'https://script.google.com/macros/s/AKfycbyypxpj3eQvI3u_38HMUOinaVRbx1Tw2pCw-b3_wDhG2Jia0zD8fgQWQusshpBcMc4S4g/exec'; // ضع رابطك هنا (ينتهي بـ /exec)
-  const AUTO_REFRESH_MS = 25000; // تحديث تلقائي كل 25 ثانية
+  // ===== Config =====
+  const GAS_URL = 'https://script.google.com/macros/s/AKfycbyypxpj3eQvI3u_38HMUOinaVRbx1Tw2pCw-b3_wDhG2Jia0zD8fgQWQusshpBcMc4S4g/exec'; // ضع رابط /exec هنا
+  const AUTO_REFRESH_MS = 25000;
 
-  // ========= Theme =========
+  // ===== Theme =====
   const themeSelect = document.getElementById('themeSelect');
   function applyTheme(name){
     document.body.classList.remove('theme-ocean','theme-mint','theme-neon','theme-rose');
@@ -165,7 +162,7 @@
   themeSelect.value = localStorage.getItem('theme') || 'ocean';
   themeSelect.addEventListener('change', e => applyTheme(e.target.value));
 
-  // ========= Tabs =========
+  // ===== Tabs =====
   const tabs = document.querySelectorAll('.tab');
   const sections = {
     overview: document.getElementById('tab-overview'),
@@ -179,7 +176,7 @@
     sections[btn.dataset.tab].classList.remove('hidden');
   }));
 
-  // ========= Pie =========
+  // ===== Pie =====
   const ctx = document.getElementById('pie');
   let pie;
   function renderPie(byCat){
@@ -193,20 +190,16 @@
     });
   }
 
-  // ========= API Helpers =========
-  async function apiGet(params = {}){
-    const u = new URL(GAS_URL);
-    Object.entries(params).forEach(([k,v])=> u.searchParams.set(k, v));
-    const res = await fetch(u, { method:'GET' });
-    return res.json();
-  }
+  // ===== API (POST-only) =====
   async function apiPost(body){
-    // بدون Content-Type لتفادي preflight
     const res = await fetch(GAS_URL, { method:'POST', body: JSON.stringify(body) });
     return res.json();
   }
+  async function apiGet(params = {}){
+    return apiPost({ action: params.action || 'summary' });
+  }
 
-  // ========= State & UI =========
+  // ===== State & UI =====
   const incomeEl = document.getElementById('income');
   const expenseEl = document.getElementById('expense');
   const balanceEl = document.getElementById('balance');
@@ -237,14 +230,12 @@
     cPersonal.textContent = fmt(summary.byCat.personal);
     renderPie(summary.byCat);
 
-    // settings
     baseSalary.value = summary.settings.baseSalary || 0;
     alloc_fixed.value = summary.settings.alloc_fixed || 0;
     alloc_variable.value = summary.settings.alloc_variable || 0;
     alloc_savings.value = summary.settings.alloc_savings || 0;
     alloc_personal.value = summary.settings.alloc_personal || 0;
 
-    // transactions list
     const tx = await apiGet({ action:'transactions' });
     txList.innerHTML = tx.data.slice().reverse().map(t => `
       <div class="flex items-center justify-between chip rounded-xl px-3 py-2">
@@ -258,20 +249,19 @@
     `).join('');
   }
 
-  // Auto refresh + manual
   let timer = setInterval(refresh, AUTO_REFRESH_MS);
   document.getElementById('refreshBtn').addEventListener('click', () => {
     clearInterval(timer); refresh(); timer=setInterval(refresh, AUTO_REFRESH_MS);
   });
 
-  // ========= Modal (Quick Add) =========
+  // ===== Modal (Quick Add) =====
   const modal = document.getElementById('modal');
   const catRow = document.getElementById('catRow');
   const modalTitle = document.getElementById('modalTitle');
   const amount = document.getElementById('amount');
   const category = document.getElementById('category');
   const note = document.getElementById('note');
-  const confirmBtn = document.getElementById('confirm'); // ← تمت إعادة التسمية لتجنّب التعارض
+  const confirmBtn = document.getElementById('confirm');
   const cancel = document.getElementById('cancel');
 
   let modalMode = 'income';
@@ -298,16 +288,19 @@
   confirmBtn.addEventListener('click', async ()=>{
     const val = Number(amount.value||0);
     if(!val || val<=0) { alert('الرجاء إدخال مبلغ صحيح'); return; }
-    if(modalMode==='income'){
-      await apiPost({ action:'addTransaction', type:'income', category:'fixed', amount:val, note: note.value });
-    } else {
-      await apiPost({ action:'addTransaction', type:'expense', category: category.value, amount:val, note: note.value });
+    try {
+      if(modalMode==='income'){
+        await apiPost({ action:'addTransaction', type:'income', category:'fixed', amount:val, note: note.value });
+      } else {
+        await apiPost({ action:'addTransaction', type:'expense', category: category.value, amount:val, note: note.value });
+      }
+    } finally {
+      closeModal(); // يغلق حتى لو فشل
+      refresh();
     }
-    closeModal();
-    refresh();
   });
 
-  // ========= Settings actions =========
+  // ===== Settings =====
   saveSettings.addEventListener('click', async ()=>{
     await apiPost({
       action:'saveSettings',
@@ -336,7 +329,7 @@
     alloc_variable.value = sug.variable;
     alloc_savings.value = sug.savings;
     alloc_personal.value = sug.personal;
-    if(window.confirm('تطبيق التوزيع المقترح وحفظه؟')){ // ← استخدام window.confirm
+    if(window.confirm('تطبيق التوزيع المقترح وحفظه؟')){
       await apiPost({ action:'applySuggestedAlloc', baseSalary:s, suggestion:{ fixed:sug.fixed, variable:sug.variable, savings:sug.savings, personal:sug.personal } });
       refresh();
     }
