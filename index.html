@@ -1,59 +1,175 @@
-<!doctype html>
-<html lang="ar" dir="rtl">
-<head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>مصروفاتي</title>
-<script src="https://cdn.tailwindcss.com"></script>
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;600;800&display=swap" rel="stylesheet">
-<style>
-:root { --bg:#0b1220; --card:#111b2e; --text:#e6edf6; --muted:#9fb2c7; --accent:#4ea0ff; --ok:#10b981; --warn:#f59e0b; --bad:#ef4444; }
-.theme-ocean { --bg:#06141f; --card:#0b2536; --text:#e2f3ff; --muted:#94b8d6; --accent:#2ec5ff; }
-.theme-mint { --bg:#061a14; --card:#0b2e24; --text:#e2fff6; --muted:#9ad4c2; --accent:#2ee6a6; }
-.theme-neon { --bg:#0a0a0f; --card:#121225; --text:#f1f1ff; --muted:#a6a6ff; --accent:#7c3aed; }
-.theme-rose { --bg:#1a0d14; --card:#2b1520; --text:#ffe9f0; --muted:#f0a8bf; --accent:#ff5c93; }
-body { background:var(--bg); color:var(--text); font-family:'Cairo', system-ui, sans-serif; }
-.card { background:linear-gradient(180deg, color-mix(in oklab, var(--card), black 5%), var(--card)); border:1px solid color-mix(in oklab, var(--card), white 6%); box-shadow:0 10px 30px rgba(0,0,0,.25); }
-.glow { box-shadow:0 0 0 rgba(0,0,0,0); transition: box-shadow .3s ease; }
-.glow:hover { box-shadow:0 0 24px color-mix(in oklab, var(--accent), white 10%); }
-.chip { background:color-mix(in oklab, var(--accent), black 80%); border:1px solid color-mix(in oklab, var(--accent), white 35%); }
-.tab { border-bottom:2px solid transparent; }
-.tab.active { border-color:var(--accent); color:var(--accent); }
-.btn { background:color-mix(in oklab, var(--accent), black 70%); border:1px solid color-mix(in oklab, var(--accent), white 35%); transition: transform .12s ease, filter .2s ease; }
-.btn:active { transform: translateY(1px) scale(.99); filter:brightness(.95); }
-.fab { position:fixed; inset-inline-end:16px; bottom:16px; display:flex; gap:12px; z-index:50; }
-.modal { position:fixed; inset:0; display:none; place-items:center; background:rgba(0,0,0,.5); backdrop-filter: blur(6px); z-index:60; }
-.modal.active { display:grid; animation: fadeIn .15s ease; }
-@keyframes fadeIn { from{ opacity:0 } to { opacity:1 } }
-</style>
-</head>
-<body class="theme-ocean">
-<div class="max-w-5xl mx-auto px-3 sm:px-6 py-6">
-<header class="flex items-center justify-between mb-6">
-<h1 class="text-2xl sm:text-3xl font-extrabold tracking-tight">مصروفاتي</h1>
-<div class="flex items-center gap-2">
-<select id="themeSelect" class="chip rounded-xl px-3 py-2 text-sm">
-<option value="ocean">🌊 Ocean</option>
-<option value="mint">🌿 Mint</option>
-<option value="neon">⚡️ Neon</option>
-<option value="rose">🌹 Rose</option>
-</select>
-<button id="refreshBtn" class="btn rounded-xl px-3 py-2 text-sm glow">تحديث</button>
-</div>
-</header>
+/** Google Apps Script backend for "مصروفاتي" **/
 
+const SHEET_TRANSACTIONS = 'transactions';
+const SHEET_SETTINGS = 'settings';
 
-<!-- Tabs -->
-<nav class="flex gap-4 mb-4">
-<button class="tab active px-2 pb-2" data-tab="overview">نظرة عامة</button>
-<button class="tab px-2 pb-2" data-tab="transactions">الحركات</button>
-<button class="tab px-2 pb-2" data-tab="settings">الإعدادات</button>
-</nav>
+function _sheet(name){
+  const ss = SpreadsheetApp.getActive();
+  let sh = ss.getSheetByName(name);
+  if(!sh){
+    sh = ss.insertSheet(name);
+  }
+  return sh;
+}
 
+// تأكيد السكيمة والهيدر رو إذا مفقودة
+function setup_(){
+  const tx = _sheet(SHEET_TRANSACTIONS);
+  if(tx.getLastRow() === 0){
+    tx.getRange(1,1,1,5).setValues([['timestamp','type','category','amount','note']]);
+  } else {
+    // تأكد أن أول صف هو هيدر
+    const first = tx.getRange(1,1,1,5).getValues()[0];
+    if(String(first[0]).toLowerCase() !== 'timestamp'){
+      tx.insertRowBefore(1);
+      tx.getRange(1,1,1,5).setValues([['timestamp','type','category','amount','note']]);
+    }
+  }
 
-<!-- Overview -->
-<section id="tab-overview" class="grid grid-cols-1 lg:grid-cols-3 gap-4">
-</html>
+  const st = _sheet(SHEET_SETTINGS);
+  if(st.getLastRow() === 0){
+    st.getRange(1,1,1,5).setValues([[0,0,0,0,0]]);
+  }
+}
+
+function _applyCors(resp){
+  return resp
+    .setHeader('Access-Control-Allow-Origin', '*')
+    .setHeader('Access-Control-Allow-Methods', 'GET,POST')
+    .setHeader('Access-Control-Allow-Headers', 'Content-Type');
+}
+
+function doGet(e){
+  setup_();
+
+  const action = (e && e.parameter && e.parameter.action) || 'summary';
+  let res = {};
+  try {
+    if(action === 'summary'){
+      res = getSummary_();
+    } else if(action === 'transactions'){
+      res = getTransactions_();
+    } else if(action === 'settings'){
+      res = getSettings_();
+    } else {
+      res = { error: 'Unknown action' };
+    }
+  } catch(err){
+    res = { ok:false, error: String(err) };
+  }
+
+  const out = ContentService.createTextOutput(JSON.stringify(res))
+    .setMimeType(ContentService.MimeType.JSON);
+  return _applyCors(out);
+}
+
+function doPost(e){
+  setup_();
+
+  let body = {};
+  try {
+    body = JSON.parse(e.postData && e.postData.contents || '{}');
+  } catch(_){ body = {}; }
+
+  const headers = ContentService.createTextOutput()
+    .setMimeType(ContentService.MimeType.JSON);
+
+  try {
+    const { action } = body;
+
+    if(action === 'addTransaction'){
+      const { type, category, amount, note } = body;
+      if(!type || !category || amount == null) throw new Error('Missing fields');
+      const sh = _sheet(SHEET_TRANSACTIONS);
+      sh.appendRow([ new Date(), String(type), String(category), Number(amount), String(note||'') ]);
+      const out = ContentService.createTextOutput(JSON.stringify({ ok:true }))
+        .setMimeType(ContentService.MimeType.JSON);
+      return _applyCors(out);
+    }
+
+    if(action === 'saveSettings'){
+      const { baseSalary, alloc_fixed, alloc_variable, alloc_savings, alloc_personal } = body;
+      const sh = _sheet(SHEET_SETTINGS);
+      if(sh.getLastRow() === 0){ sh.getRange(1,1,1,5).setValues([[0,0,0,0,0]]); }
+      sh.getRange(1,1,1,5).setValues([[
+        Number(baseSalary||0),
+        Number(alloc_fixed||0),
+        Number(alloc_variable||0),
+        Number(alloc_savings||0),
+        Number(alloc_personal||0)
+      ]]);
+      const out = ContentService.createTextOutput(JSON.stringify({ ok:true }))
+        .setMimeType(ContentService.MimeType.JSON);
+      return _applyCors(out);
+    }
+
+    if(action === 'applySuggestedAlloc'){
+      const { baseSalary, suggestion } = body; // {fixed, variable, savings, personal}
+      const sh = _sheet(SHEET_SETTINGS);
+      if(sh.getLastRow() === 0){ sh.getRange(1,1,1,5).setValues([[0,0,0,0,0]]); }
+      sh.getRange(1,1,1,5).setValues([[
+        Number(baseSalary||0),
+        Number(suggestion?.fixed||0),
+        Number(suggestion?.variable||0),
+        Number(suggestion?.savings||0),
+        Number(suggestion?.personal||0)
+      ]]);
+      const out = ContentService.createTextOutput(JSON.stringify({ ok:true }))
+        .setMimeType(ContentService.MimeType.JSON);
+      return _applyCors(out);
+    }
+
+    const out = ContentService.createTextOutput(JSON.stringify({ ok:false, error:'Unknown action' }))
+      .setMimeType(ContentService.MimeType.JSON);
+    return _applyCors(out);
+
+  } catch(err){
+    const out = ContentService.createTextOutput(JSON.stringify({ ok:false, error:String(err) }))
+      .setMimeType(ContentService.MimeType.JSON);
+    return _applyCors(out);
+  }
+}
+
+function getTransactions_(){
+  const sh = _sheet(SHEET_TRANSACTIONS);
+  const rows = sh.getDataRange().getValues();
+  rows.shift(); // remove header
+  const data = rows.map(r => ({
+    timestamp: r[0],
+    type: r[1],
+    category: r[2],
+    amount: r[3],
+    note: r[4]
+  }));
+  return { headers: ['timestamp','type','category','amount','note'], data };
+}
+
+function getSettings_(){
+  const sh = _sheet(SHEET_SETTINGS);
+  const v = sh.getRange(1,1,1,5).getValues()[0];
+  return {
+    baseSalary: Number(v[0]||0),
+    alloc_fixed: Number(v[1]||0),
+    alloc_variable: Number(v[2]||0),
+    alloc_savings: Number(v[3]||0),
+    alloc_personal: Number(v[4]||0),
+  };
+}
+
+function getSummary_(){
+  const tx = getTransactions_().data;
+  const st = getSettings_();
+  let income = 0, expense = 0;
+  const byCat = { fixed:0, variable:0, savings:0, personal:0 };
+
+  tx.forEach(t => {
+    if(t.type === 'income') income += Number(t.amount||0);
+    else if(t.type === 'expense'){
+      expense += Number(t.amount||0);
+      if(byCat[t.category] != null) byCat[t.category] += Number(t.amount||0);
+    }
+  });
+
+  const balance = income - expense;
+  return { income, expense, balance, byCat, settings: st };
+}
