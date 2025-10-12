@@ -1,175 +1,349 @@
-/** Google Apps Script backend for "مصروفاتي" **/
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>مصروفاتي</title>
 
-const SHEET_TRANSACTIONS = 'transactions';
-const SHEET_SETTINGS = 'settings';
+  <!-- Tailwind CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
-function _sheet(name){
-  const ss = SpreadsheetApp.getActive();
-  let sh = ss.getSheetByName(name);
-  if(!sh){
-    sh = ss.insertSheet(name);
+  <!-- Cairo font -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;600;800&display=swap" rel="stylesheet">
+
+  <style>
+    :root { --bg:#0b1220; --card:#111b2e; --text:#e6edf6; --muted:#9fb2c7; --accent:#4ea0ff; --ok:#10b981; --warn:#f59e0b; --bad:#ef4444; }
+    .theme-ocean { --bg:#06141f; --card:#0b2536; --text:#e2f3ff; --muted:#94b8d6; --accent:#2ec5ff; }
+    .theme-mint  { --bg:#061a14; --card:#0b2e24; --text:#e2fff6; --muted:#9ad4c2; --accent:#2ee6a6; }
+    .theme-neon  { --bg:#0a0a0f; --card:#121225; --text:#f1f1ff; --muted:#a6a6ff; --accent:#7c3aed; }
+    .theme-rose  { --bg:#1a0d14; --card:#2b1520; --text:#ffe9f0; --muted:#f0a8bf; --accent:#ff5c93; }
+
+    body { background:var(--bg); color:var(--text); font-family:'Cairo', system-ui, sans-serif; }
+    .card { background:linear-gradient(180deg, color-mix(in oklab, var(--card), black 5%), var(--card)); border:1px solid color-mix(in oklab, var(--card), white 6%); box-shadow:0 10px 30px rgba(0,0,0,.25); }
+    .glow { box-shadow:0 0 0 rgba(0,0,0,0); transition: box-shadow .3s ease; }
+    .glow:hover { box-shadow:0 0 24px color-mix(in oklab, var(--accent), white 10%); }
+    .chip { background:color-mix(in oklab, var(--accent), black 80%); border:1px solid color-mix(in oklab, var(--accent), white 35%); }
+    .tab { border-bottom:2px solid transparent; }
+    .tab.active { border-color:var(--accent); color:var(--accent); }
+    .btn { background:color-mix(in oklab, var(--accent), black 70%); border:1px solid color-mix(in oklab, var(--accent), white 35%); transition: transform .12s ease, filter .2s ease; }
+    .btn:active { transform: translateY(1px) scale(.99); filter:brightness(.95); }
+    .fab { position:fixed; inset-inline-end:16px; bottom:16px; display:flex; gap:12px; z-index:50; }
+    .modal { position:fixed; inset:0; display:none; place-items:center; background:rgba(0,0,0,.5); backdrop-filter: blur(6px); z-index:60; }
+    .modal.active { display:grid; animation: fadeIn .15s ease; }
+    @keyframes fadeIn { from{ opacity:0 } to { opacity:1 } }
+    .animate-in { animation: pop .2s ease; }
+    @keyframes pop { from{ transform:scale(.98); opacity:.9 } to{ transform:scale(1); opacity:1 } }
+
+    .text-muted { color: var(--muted); }
+    .text-ok    { color: var(--ok); }
+    .text-bad   { color: var(--bad); }
+  </style>
+</head>
+<body class="theme-ocean">
+  <div class="max-w-5xl mx-auto px-3 sm:px-6 py-6">
+    <header class="flex items-center justify-between mb-6">
+      <h1 class="text-2xl sm:text-3xl font-extrabold tracking-tight">مصروفاتي</h1>
+      <div class="flex items-center gap-2">
+        <select id="themeSelect" class="chip rounded-xl px-3 py-2 text-sm">
+          <option value="ocean">🌊 Ocean</option>
+          <option value="mint">🌿 Mint</option>
+          <option value="neon">⚡️ Neon</option>
+          <option value="rose">🌹 Rose</option>
+        </select>
+        <button id="refreshBtn" class="btn rounded-xl px-3 py-2 text-sm glow">تحديث</button>
+      </div>
+    </header>
+
+    <!-- Tabs -->
+    <nav class="flex gap-4 mb-4">
+      <button class="tab active px-2 pb-2" data-tab="overview">نظرة عامة</button>
+      <button class="tab px-2 pb-2" data-tab="transactions">الحركات</button>
+      <button class="tab px-2 pb-2" data-tab="settings">الإعدادات</button>
+    </nav>
+
+    <!-- Overview -->
+    <section id="tab-overview" class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      <div class="card rounded-2xl p-4 lg:col-span-2">
+        <canvas id="pie"></canvas>
+      </div>
+      <div class="card rounded-2xl p-4 flex flex-col gap-3">
+        <div class="flex items-center justify-between"><span class="text-muted">الراتب/الدخل</span><strong id="income" class="text-ok text-lg">0</strong></div>
+        <div class="flex items-center justify-between"><span class="text-muted">المصاريف</span><strong id="expense" class="text-bad text-lg">0</strong></div>
+        <div class="flex items-center justify-between"><span class="text-muted">الرصيد</span><strong id="balance" class="text-lg">0</strong></div>
+        <div class="grid grid-cols-2 gap-2 pt-2 text-sm">
+          <div class="chip rounded-xl px-3 py-2">ثابت: <b id="c-fixed">0</b></div>
+          <div class="chip rounded-xl px-3 py-2">متغير: <b id="c-variable">0</b></div>
+          <div class="chip rounded-xl px-3 py-2">ادخار: <b id="c-savings">0</b></div>
+          <div class="chip rounded-xl px-3 py-2">التزامات: <b id="c-personal">0</b></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Transactions -->
+    <section id="tab-transactions" class="hidden">
+      <div class="card rounded-2xl p-4">
+        <div id="txList" class="space-y-2 text-sm"></div>
+      </div>
+    </section>
+
+    <!-- Settings -->
+    <section id="tab-settings" class="hidden">
+      <div class="card rounded-2xl p-4 space-y-4">
+        <div class="grid sm:grid-cols-2 gap-3">
+          <label class="flex flex-col gap-1">
+            <span class="text-muted text-sm">الراتب الأساسي</span>
+            <input id="baseSalary" type="number" class="chip rounded-xl px-3 py-2 bg-transparent" placeholder="مثال: 5000" />
+          </label>
+          <div class="flex items-end gap-2">
+            <button id="applySuggest" class="btn rounded-xl px-3 py-2 glow">تطبيق التوزيع المقترح</button>
+            <button id="saveSettings" class="btn rounded-xl px-3 py-2 glow">حفظ</button>
+          </div>
+        </div>
+
+        <div class="grid sm:grid-cols-4 gap-3 text-sm">
+          <label class="flex flex-col gap-1"><span class="text-muted">ثابت %</span><input id="alloc_fixed" type="number" min="0" max="100" class="chip rounded-xl px-3 py-2 bg-transparent"/></label>
+          <label class="flex flex-col gap-1"><span class="text-muted">متغير %</span><input id="alloc_variable" type="number" min="0" max="100" class="chip rounded-xl px-3 py-2 bg-transparent"/></label>
+          <label class="flex flex-col gap-1"><span class="text-muted">ادخار %</span><input id="alloc_savings" type="number" min="0" max="100" class="chip rounded-xl px-3 py-2 bg-transparent"/></label>
+          <label class="flex flex-col gap-1"><span class="text-muted">التزامات %</span><input id="alloc_personal" type="number" min="0" max="100" class="chip rounded-xl px-3 py-2 bg-transparent"/></label>
+        </div>
+
+        <p class="text-xs text-muted">يمكنك تجاهل النسب إن أردت، أو تطبيقها على حسب الراتب لعرض حدود إرشادية.</p>
+      </div>
+    </section>
+
+    <!-- FAB +/- -->
+    <div class="fab">
+      <button id="addIncome" class="btn glow rounded-full w-14 h-14 text-2xl">+</button>
+      <button id="addExpense" class="btn glow rounded-full w-14 h-14 text-2xl">−</button>
+    </div>
+
+    <!-- Modal: Quick Add -->
+    <div id="modal" class="modal">
+      <div class="card rounded-2xl p-4 w-[92vw] max-w-md animate-in">
+        <h3 id="modalTitle" class="text-lg font-bold mb-3">إضافة</h3>
+        <div class="space-y-3">
+          <input id="amount" type="number" inputmode="decimal" class="chip rounded-xl px-3 py-2 w-full bg-transparent" placeholder="المبلغ" />
+          <div id="catRow" class="hidden grid grid-cols-2 gap-2">
+            <select id="category" class="chip rounded-xl px-3 py-2 bg-transparent">
+              <option value="fixed">مصاريف ثابتة</option>
+              <option value="variable">مصاريف متغيرة</option>
+              <option value="savings">ادخار</option>
+              <option value="personal">التزامات شخصية</option>
+            </select>
+            <input id="note" class="chip rounded-xl px-3 py-2 bg-transparent" placeholder="ملاحظة (اختياري)"/>
+          </div>
+          <div class="flex gap-2 justify-end pt-1">
+            <button id="cancel" class="btn rounded-xl px-3 py-2">إلغاء</button>
+            <button id="confirm" class="btn rounded-xl px-3 py-2">حفظ</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <footer class="mt-8 text-center text-xs text-muted">
+      يعمل عبر Google Apps Script + GitHub Pages. يدعم الثيمات، مودال إدخال سريع، تبويبات، Pie تفاعلي، وتحديث تلقائي.
+    </footer>
+  </div>
+
+<script>
+  // ========= Config =========
+  const GAS_URL = 'https://script.google.com/macros/s/AKfycbyypxpj3eQvI3u_38HMUOinaVRbx1Tw2pCw-b3_wDhG2Jia0zD8fgQWQusshpBcMc4S4g/exec'; // ضع رابطك هنا
+  const AUTO_REFRESH_MS = 25000; // تحديث تلقائي كل 25 ثانية
+
+  // ========= Theme =========
+  const themeSelect = document.getElementById('themeSelect');
+  function applyTheme(name){
+    document.body.classList.remove('theme-ocean','theme-mint','theme-neon','theme-rose');
+    document.body.classList.add('theme-'+name);
+    localStorage.setItem('theme', name);
   }
-  return sh;
-}
+  applyTheme(localStorage.getItem('theme') || 'ocean');
+  themeSelect.value = localStorage.getItem('theme') || 'ocean';
+  themeSelect.addEventListener('change', e => applyTheme(e.target.value));
 
-// تأكيد السكيمة والهيدر رو إذا مفقودة
-function setup_(){
-  const tx = _sheet(SHEET_TRANSACTIONS);
-  if(tx.getLastRow() === 0){
-    tx.getRange(1,1,1,5).setValues([['timestamp','type','category','amount','note']]);
-  } else {
-    // تأكد أن أول صف هو هيدر
-    const first = tx.getRange(1,1,1,5).getValues()[0];
-    if(String(first[0]).toLowerCase() !== 'timestamp'){
-      tx.insertRowBefore(1);
-      tx.getRange(1,1,1,5).setValues([['timestamp','type','category','amount','note']]);
-    }
-  }
-
-  const st = _sheet(SHEET_SETTINGS);
-  if(st.getLastRow() === 0){
-    st.getRange(1,1,1,5).setValues([[0,0,0,0,0]]);
-  }
-}
-
-function _applyCors(resp){
-  return resp
-    .setHeader('Access-Control-Allow-Origin', '*')
-    .setHeader('Access-Control-Allow-Methods', 'GET,POST')
-    .setHeader('Access-Control-Allow-Headers', 'Content-Type');
-}
-
-function doGet(e){
-  setup_();
-
-  const action = (e && e.parameter && e.parameter.action) || 'summary';
-  let res = {};
-  try {
-    if(action === 'summary'){
-      res = getSummary_();
-    } else if(action === 'transactions'){
-      res = getTransactions_();
-    } else if(action === 'settings'){
-      res = getSettings_();
-    } else {
-      res = { error: 'Unknown action' };
-    }
-  } catch(err){
-    res = { ok:false, error: String(err) };
-  }
-
-  const out = ContentService.createTextOutput(JSON.stringify(res))
-    .setMimeType(ContentService.MimeType.JSON);
-  return _applyCors(out);
-}
-
-function doPost(e){
-  setup_();
-
-  let body = {};
-  try {
-    body = JSON.parse(e.postData && e.postData.contents || '{}');
-  } catch(_){ body = {}; }
-
-  const headers = ContentService.createTextOutput()
-    .setMimeType(ContentService.MimeType.JSON);
-
-  try {
-    const { action } = body;
-
-    if(action === 'addTransaction'){
-      const { type, category, amount, note } = body;
-      if(!type || !category || amount == null) throw new Error('Missing fields');
-      const sh = _sheet(SHEET_TRANSACTIONS);
-      sh.appendRow([ new Date(), String(type), String(category), Number(amount), String(note||'') ]);
-      const out = ContentService.createTextOutput(JSON.stringify({ ok:true }))
-        .setMimeType(ContentService.MimeType.JSON);
-      return _applyCors(out);
-    }
-
-    if(action === 'saveSettings'){
-      const { baseSalary, alloc_fixed, alloc_variable, alloc_savings, alloc_personal } = body;
-      const sh = _sheet(SHEET_SETTINGS);
-      if(sh.getLastRow() === 0){ sh.getRange(1,1,1,5).setValues([[0,0,0,0,0]]); }
-      sh.getRange(1,1,1,5).setValues([[
-        Number(baseSalary||0),
-        Number(alloc_fixed||0),
-        Number(alloc_variable||0),
-        Number(alloc_savings||0),
-        Number(alloc_personal||0)
-      ]]);
-      const out = ContentService.createTextOutput(JSON.stringify({ ok:true }))
-        .setMimeType(ContentService.MimeType.JSON);
-      return _applyCors(out);
-    }
-
-    if(action === 'applySuggestedAlloc'){
-      const { baseSalary, suggestion } = body; // {fixed, variable, savings, personal}
-      const sh = _sheet(SHEET_SETTINGS);
-      if(sh.getLastRow() === 0){ sh.getRange(1,1,1,5).setValues([[0,0,0,0,0]]); }
-      sh.getRange(1,1,1,5).setValues([[
-        Number(baseSalary||0),
-        Number(suggestion?.fixed||0),
-        Number(suggestion?.variable||0),
-        Number(suggestion?.savings||0),
-        Number(suggestion?.personal||0)
-      ]]);
-      const out = ContentService.createTextOutput(JSON.stringify({ ok:true }))
-        .setMimeType(ContentService.MimeType.JSON);
-      return _applyCors(out);
-    }
-
-    const out = ContentService.createTextOutput(JSON.stringify({ ok:false, error:'Unknown action' }))
-      .setMimeType(ContentService.MimeType.JSON);
-    return _applyCors(out);
-
-  } catch(err){
-    const out = ContentService.createTextOutput(JSON.stringify({ ok:false, error:String(err) }))
-      .setMimeType(ContentService.MimeType.JSON);
-    return _applyCors(out);
-  }
-}
-
-function getTransactions_(){
-  const sh = _sheet(SHEET_TRANSACTIONS);
-  const rows = sh.getDataRange().getValues();
-  rows.shift(); // remove header
-  const data = rows.map(r => ({
-    timestamp: r[0],
-    type: r[1],
-    category: r[2],
-    amount: r[3],
-    note: r[4]
-  }));
-  return { headers: ['timestamp','type','category','amount','note'], data };
-}
-
-function getSettings_(){
-  const sh = _sheet(SHEET_SETTINGS);
-  const v = sh.getRange(1,1,1,5).getValues()[0];
-  return {
-    baseSalary: Number(v[0]||0),
-    alloc_fixed: Number(v[1]||0),
-    alloc_variable: Number(v[2]||0),
-    alloc_savings: Number(v[3]||0),
-    alloc_personal: Number(v[4]||0),
+  // ========= Tabs =========
+  const tabs = document.querySelectorAll('.tab');
+  const sections = {
+    overview: document.getElementById('tab-overview'),
+    transactions: document.getElementById('tab-transactions'),
+    settings: document.getElementById('tab-settings')
   };
-}
+  tabs.forEach(btn => btn.addEventListener('click', () => {
+    tabs.forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    Object.values(sections).forEach(sec => sec.classList.add('hidden'));
+    sections[btn.dataset.tab].classList.remove('hidden');
+  }));
 
-function getSummary_(){
-  const tx = getTransactions_().data;
-  const st = getSettings_();
-  let income = 0, expense = 0;
-  const byCat = { fixed:0, variable:0, savings:0, personal:0 };
+  // ========= Pie =========
+  const ctx = document.getElementById('pie');
+  let pie;
+  function renderPie(byCat){
+    const data = [byCat.fixed||0, byCat.variable||0, byCat.savings||0, byCat.personal||0];
+    const labels = ['ثابت','متغير','ادخار','التزامات'];
+    if(pie){ pie.destroy(); }
+    pie = new Chart(ctx, {
+      type: 'pie',
+      data: { labels, datasets: [{ data }] },
+      options: { responsive: true, plugins: { legend: { position:'bottom' } } }
+    });
+  }
 
-  tx.forEach(t => {
-    if(t.type === 'income') income += Number(t.amount||0);
-    else if(t.type === 'expense'){
-      expense += Number(t.amount||0);
-      if(byCat[t.category] != null) byCat[t.category] += Number(t.amount||0);
+  // ========= API Helpers =========
+  async function apiGet(params = {}){
+    const u = new URL(GAS_URL);
+    Object.entries(params).forEach(([k,v])=> u.searchParams.set(k, v));
+    const res = await fetch(u, { method:'GET' });
+    return res.json();
+  }
+  async function apiPost(body){
+    // بدون Content-Type لتفادي طلب OPTIONS (preflight)
+    const res = await fetch(GAS_URL, { method:'POST', body: JSON.stringify(body) });
+    return res.json();
+  }
+
+  // ========= State & UI =========
+  const incomeEl = document.getElementById('income');
+  const expenseEl = document.getElementById('expense');
+  const balanceEl = document.getElementById('balance');
+  const cFixed = document.getElementById('c-fixed');
+  const cVariable = document.getElementById('c-variable');
+  const cSavings = document.getElementById('c-savings');
+  const cPersonal = document.getElementById('c-personal');
+  const txList = document.getElementById('txList');
+
+  const baseSalary = document.getElementById('baseSalary');
+  const alloc_fixed = document.getElementById('alloc_fixed');
+  const alloc_variable = document.getElementById('alloc_variable');
+  const alloc_savings = document.getElementById('alloc_savings');
+  const alloc_personal = document.getElementById('alloc_personal');
+  const saveSettings = document.getElementById('saveSettings');
+  const applySuggest = document.getElementById('applySuggest');
+
+  function fmt(n){ return Number(n||0).toLocaleString('ar-EG'); }
+
+  async function refresh(){
+    const summary = await apiGet({ action:'summary' });
+    incomeEl.textContent = fmt(summary.income);
+    expenseEl.textContent = fmt(summary.expense);
+    balanceEl.textContent = fmt(summary.balance);
+    cFixed.textContent = fmt(summary.byCat.fixed);
+    cVariable.textContent = fmt(summary.byCat.variable);
+    cSavings.textContent = fmt(summary.byCat.savings);
+    cPersonal.textContent = fmt(summary.byCat.personal);
+    renderPie(summary.byCat);
+
+    // settings
+    baseSalary.value = summary.settings.baseSalary || 0;
+    alloc_fixed.value = summary.settings.alloc_fixed || 0;
+    alloc_variable.value = summary.settings.alloc_variable || 0;
+    alloc_savings.value = summary.settings.alloc_savings || 0;
+    alloc_personal.value = summary.settings.alloc_personal || 0;
+
+    // transactions list
+    const tx = await apiGet({ action:'transactions' });
+    txList.innerHTML = tx.data.slice().reverse().map(t => `
+      <div class="flex items-center justify-between chip rounded-xl px-3 py-2">
+        <div class="flex items-center gap-2">
+          <span class="text-xs opacity-70">${new Date(t.timestamp).toLocaleString('ar-EG')}</span>
+          <span class="text-xs">${t.category}</span>
+          <span class="text-xs opacity-70">${t.note||''}</span>
+        </div>
+        <b class="${t.type==='income'?'text-ok':'text-bad'}">${t.type==='income'?'+':'-'}${fmt(t.amount)}</b>
+      </div>
+    `).join('');
+  }
+
+  // Auto refresh + manual
+  let timer = setInterval(refresh, AUTO_REFRESH_MS);
+  document.getElementById('refreshBtn').addEventListener('click', () => {
+    clearInterval(timer); refresh(); timer=setInterval(refresh, AUTO_REFRESH_MS);
+  });
+
+  // ========= Modal (Quick Add) =========
+  const modal = document.getElementById('modal');
+  const catRow = document.getElementById('catRow');
+  const modalTitle = document.getElementById('modalTitle');
+  const amount = document.getElementById('amount');
+  const category = document.getElementById('category');
+  const note = document.getElementById('note');
+  const confirm = document.getElementById('confirm');
+  const cancel = document.getElementById('cancel');
+
+  let modalMode = 'income';
+  function openModal(mode){
+    modalMode = mode;
+    modal.classList.add('active');
+    amount.value = ''; note.value = '';
+    if(mode === 'expense'){
+      catRow.classList.remove('hidden');
+      modalTitle.textContent = 'إضافة مصروف';
+    } else {
+      catRow.classList.add('hidden');
+      modalTitle.textContent = 'إضافة دخل/راتب';
+    }
+    setTimeout(()=> amount.focus(), 60);
+  }
+  function closeModal(){ modal.classList.remove('active'); }
+
+  document.getElementById('addIncome').addEventListener('click', ()=> openModal('income'));
+  document.getElementById('addExpense').addEventListener('click', ()=> openModal('expense'));
+  cancel.addEventListener('click', closeModal);
+  modal.addEventListener('click', (e)=> { if(e.target===modal) closeModal(); });
+
+  confirm.addEventListener('click', async ()=>{
+    const val = Number(amount.value||0);
+    if(!val || val<=0) { alert('الرجاء إدخال مبلغ صحيح'); return; }
+    if(modalMode==='income'){
+      await apiPost({ action:'addTransaction', type:'income', category:'fixed', amount:val, note: note.value });
+    } else {
+      await apiPost({ action:'addTransaction', type:'expense', category: category.value, amount:val, note: note.value });
+    }
+    closeModal();
+    refresh();
+  });
+
+  // ========= Settings actions =========
+  saveSettings.addEventListener('click', async ()=>{
+    await apiPost({
+      action:'saveSettings',
+      baseSalary: Number(baseSalary.value||0),
+      alloc_fixed: Number(alloc_fixed.value||0),
+      alloc_variable: Number(alloc_variable.value||0),
+      alloc_savings: Number(alloc_savings.value||0),
+      alloc_personal: Number(alloc_personal.value||0)
+    });
+    refresh();
+  });
+
+  function suggestAllocation(salary){
+    const s = Number(salary||0);
+    let fixed = 45, variable = 30, savings = 20, personal = 5;
+    if(s > 0 && s < 3000){ fixed = 50; variable = 28; savings = 17; personal = 5; }
+    else if(s >= 3000 && s < 7000){ fixed = 47; variable = 28; savings = 20; personal = 5; }
+    else if(s >= 7000){ fixed = 45; variable = 28; savings = 22; personal = 5; }
+    return { fixed, variable, savings, personal };
+  }
+
+  document.getElementById('applySuggest').addEventListener('click', async ()=>{
+    const s = Number(baseSalary.value||0);
+    const sug = suggestAllocation(s);
+    alloc_fixed.value = sug.fixed;
+    alloc_variable.value = sug.variable;
+    alloc_savings.value = sug.savings;
+    alloc_personal.value = sug.personal;
+    if(confirm('تطبيق التوزيع المقترح وحفظه؟')){
+      await apiPost({ action:'applySuggestedAlloc', baseSalary:s, suggestion:{ fixed:sug.fixed, variable:sug.variable, savings:sug.savings, personal:sug.personal } });
+      refresh();
     }
   });
 
-  const balance = income - expense;
-  return { income, expense, balance, byCat, settings: st };
-}
+  // Start
+  refresh();
+</script>
+</body>
+</html>
