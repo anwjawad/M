@@ -148,7 +148,7 @@
 
 <script>
   // ===== Config =====
-  const GAS_URL = 'https://script.google.com/macros/s/AKfycbym51GfVWKT8PeC5JnKsEedejKSZyHM8ImtEd8fmX_GHmHJq_q-PFolPPu0s8acfTHlgA/exec'; // ضع رابط /exec هنا
+  const GAS_URL = 'https://script.google.com/macros/s/AKfycbym51GfVWKT8PeC5JnKsEedejKSZyHM8ImtEd8fmX_GHmHJq_q-PFolPPu0s8acfTHlgA/exec';
   const AUTO_REFRESH_MS = 25000;
 
   // ===== Theme =====
@@ -176,12 +176,12 @@
     sections[btn.dataset.tab].classList.remove('hidden');
   }));
 
-  // ===== Pie =====
+  // ===== Pie (dynamic) =====
   const ctx = document.getElementById('pie');
   let pie;
   function renderPie(byCat){
-    const data = [byCat.fixed||0, byCat.variable||0, byCat.savings||0, byCat.personal||0];
-    const labels = ['ثابت','متغير','ادخار','التزامات'];
+    const labels = Object.keys(byCat||{});
+    const data = labels.map(k => byCat[k]||0);
     if(pie){ pie.destroy(); }
     pie = new Chart(ctx, {
       type: 'pie',
@@ -190,13 +190,33 @@
     });
   }
 
-  // ===== API (POST-only) =====
-  async function apiPost(body){
-    const res = await fetch(GAS_URL, { method:'POST', body: JSON.stringify(body) });
-    return res.json();
+  // ===== JSONP helper (GET) =====
+  function jsonp(url, params={}){
+    return new Promise((resolve,reject)=>{
+      const cb = 'cb_' + Math.random().toString(36).slice(2);
+      params.callback = cb;
+      const u = new URL(url);
+      Object.entries(params).forEach(([k,v])=> u.searchParams.set(k, v));
+      const s = document.createElement('script');
+      window[cb] = (data)=>{ resolve(data); cleanup(); };
+      s.onerror = ()=>{ reject(new Error('JSONP failed')); cleanup(); };
+      function cleanup(){ delete window[cb]; s.remove(); }
+      s.src = u.toString();
+      document.body.appendChild(s);
+    });
   }
-  async function apiGet(params = {}){
-    return apiPost({ action: params.action || 'summary' });
+
+  // ===== API (CORS-proof)
+  async function apiGet(params = {}){   // READ via JSONP
+    return jsonp(GAS_URL, params);
+  }
+  async function apiPost(body){         // WRITE via POST no-cors (we don't read response)
+    try{
+      await fetch(GAS_URL, { method:'POST', mode:'no-cors', body: JSON.stringify(body) });
+      return { ok:true };
+    }catch(e){
+      return { ok:false, error:String(e) };
+    }
   }
 
   // ===== State & UI =====
@@ -221,23 +241,24 @@
 
   async function refresh(){
     const summary = await apiGet({ action:'summary' });
+    const by = summary.byCat || {};
     incomeEl.textContent = fmt(summary.income);
     expenseEl.textContent = fmt(summary.expense);
     balanceEl.textContent = fmt(summary.balance);
-    cFixed.textContent = fmt(summary.byCat.fixed);
-    cVariable.textContent = fmt(summary.byCat.variable);
-    cSavings.textContent = fmt(summary.byCat.savings);
-    cPersonal.textContent = fmt(summary.byCat.personal);
-    renderPie(summary.byCat);
+    cFixed.textContent    = fmt(by.fixed || 0);
+    cVariable.textContent = fmt(by.variable || 0);
+    cSavings.textContent  = fmt(by.savings || 0);
+    cPersonal.textContent = fmt(by.personal || 0);
+    renderPie(by);
 
-    baseSalary.value = summary.settings.baseSalary || 0;
-    alloc_fixed.value = summary.settings.alloc_fixed || 0;
+    baseSalary.value   = summary.settings.baseSalary || 0;
+    alloc_fixed.value  = summary.settings.alloc_fixed || 0;
     alloc_variable.value = summary.settings.alloc_variable || 0;
-    alloc_savings.value = summary.settings.alloc_savings || 0;
+    alloc_savings.value  = summary.settings.alloc_savings || 0;
     alloc_personal.value = summary.settings.alloc_personal || 0;
 
     const tx = await apiGet({ action:'transactions' });
-    txList.innerHTML = tx.data.slice().reverse().map(t => `
+    txList.innerHTML = (tx.data||[]).slice().reverse().map(t => `
       <div class="flex items-center justify-between chip rounded-xl px-3 py-2">
         <div class="flex items-center gap-2">
           <span class="text-xs opacity-70">${new Date(t.timestamp).toLocaleString('ar-EG')}</span>
@@ -295,7 +316,7 @@
         await apiPost({ action:'addTransaction', type:'expense', category: category.value, amount:val, note: note.value });
       }
     } finally {
-      closeModal(); // يغلق حتى لو فشل
+      closeModal();
       refresh();
     }
   });
@@ -338,6 +359,7 @@
   // Start
   refresh();
 </script>
+  <!-- ميزات إضافية (اختياري): ضع الملفات إن كنت تستخدمها -->
   <script src="app.extra.js"></script>
   <script src="app.features.js"></script>
 </body>
