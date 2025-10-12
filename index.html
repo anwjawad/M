@@ -151,7 +151,7 @@
 
 <script>
   // ========= Config =========
-  const GAS_URL = 'https://script.google.com/macros/s/AKfycbyypxpj3eQvI3u_38HMUOinaVRbx1Tw2pCw-b3_wDhG2Jia0zD8fgQWQusshpBcMc4S4g/exec'; // ضع رابطك هنا
+  const GAS_URL = 'https://script.google.com/macros/s/AKfycbyypxpj3eQvI3u_38HMUOinaVRbx1Tw2pCw-b3_wDhG2Jia0zD8fgQWQusshpBcMc4S4g/exec'; // ضع رابطك هنا (ينتهي بـ /exec)
   const AUTO_REFRESH_MS = 25000; // تحديث تلقائي كل 25 ثانية
 
   // ========= Theme =========
@@ -201,7 +201,7 @@
     return res.json();
   }
   async function apiPost(body){
-    // بدون Content-Type لتفادي طلب OPTIONS (preflight)
+    // بدون Content-Type لتفادي preflight
     const res = await fetch(GAS_URL, { method:'POST', body: JSON.stringify(body) });
     return res.json();
   }
@@ -271,7 +271,7 @@
   const amount = document.getElementById('amount');
   const category = document.getElementById('category');
   const note = document.getElementById('note');
-  const confirm = document.getElementById('confirm');
+  const confirmBtn = document.getElementById('confirm'); // ← تمت إعادة التسمية لتجنّب التعارض
   const cancel = document.getElementById('cancel');
 
   let modalMode = 'income';
@@ -295,7 +295,7 @@
   cancel.addEventListener('click', closeModal);
   modal.addEventListener('click', (e)=> { if(e.target===modal) closeModal(); });
 
-  confirm.addEventListener('click', async ()=>{
+  confirmBtn.addEventListener('click', async ()=>{
     const val = Number(amount.value||0);
     if(!val || val<=0) { alert('الرجاء إدخال مبلغ صحيح'); return; }
     if(modalMode==='income'){
@@ -336,7 +336,7 @@
     alloc_variable.value = sug.variable;
     alloc_savings.value = sug.savings;
     alloc_personal.value = sug.personal;
-    if(confirm('تطبيق التوزيع المقترح وحفظه؟')){
+    if(window.confirm('تطبيق التوزيع المقترح وحفظه؟')){ // ← استخدام window.confirm
       await apiPost({ action:'applySuggestedAlloc', baseSalary:s, suggestion:{ fixed:sug.fixed, variable:sug.variable, savings:sug.savings, personal:sug.personal } });
       refresh();
     }
