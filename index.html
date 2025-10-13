@@ -31,7 +31,7 @@
     .fab { position:fixed; inset-inline-end:16px; bottom:16px; display:flex; gap:12px; z-index:50; }
     .modal { position:fixed; inset:0; display:none; place-items:center; background:rgba(0,0,0,.5); backdrop-filter: blur(6px); z-index:60; }
     .modal.active { display:grid; animation: fadeIn .15s ease; }
-    @keyframes fadeIn { from{ opacity:0 } to { opacity:1 } }
+    @keyframes fadeIn { from{ opacity:0 } to{ opacity:1 } }
     .animate-in { animation: pop .2s ease; }
     @keyframes pop { from{ transform:scale(.98); opacity:.9 } to{ transform:scale(1); opacity:1 } }
 
@@ -149,7 +149,7 @@
 <script>
   // ===== Config =====
   const GAS_URL = 'https://script.google.com/macros/s/AKfycbwL5IahwxEUzKoB9w8aSAZ4jGafdTvtFjVMmwvL6s7Qj1HFcGn2_f2-2IFvdHxH9Z8t8A/exec';
-  const AUTO_REFRESH_MS = 45000; // لتخفيف الضغط
+  const AUTO_REFRESH_MS = 45000;
 
   // ===== Theme =====
   const themeSelect = document.getElementById('themeSelect');
@@ -181,7 +181,7 @@
   let pie;
   function renderPie(byCat){
     const labels = Object.keys(byCat||{});
-    const data = labels.map(k => byCat[k]||0);
+       const data = labels.map(k => byCat[k]||0);
     if(pie){ pie.destroy(); }
     pie = new Chart(ctx, {
       type: 'pie',
@@ -191,50 +191,66 @@
   }
 
   // ===== JSONP helper (GET) =====
+  // ثابت الاسم عبر المحاولات + تجنّب ReferenceError لردود متأخرة
   function jsonp(url, params={}, { timeoutMs=9000, retryOnce=true } = {}){
     return new Promise((resolve,reject)=>{
-      const cb = 'cb_' + Math.random().toString(36).slice(2);
-      params.callback = cb;
-
-      let u;
-      try { u = new URL(url); } catch (e) { reject(new Error('Invalid GAS_URL')); return; }
-      Object.entries(params).forEach(([k,v])=> u.searchParams.set(k, v));
-
-      const s = document.createElement('script');
-      s.defer = true;
-      s.referrerPolicy = 'no-referrer';
-
-      let done = false;
+      const cbName = 'cb_' + Math.random().toString(36).slice(2); // اسم ثابت لهذه العملية
+      let cleaned = false; // هل نظّفنا الموارد؟
       let tmr;
 
-      function cleanup(){
+      function cleanup(keepNoop=false){
         if (tmr) clearTimeout(tmr);
-        try { delete window[cb]; } catch(_){ window[cb]=undefined; }
-        if (s && s.parentNode) s.parentNode.removeChild(s);
+        if (keepNoop) {
+          // أبقِ Callback كـ no-op لمنع ReferenceError من أي ردود متأخرة
+          window[cbName] = function(){};
+          // أزله لاحقًا بعد مهلة أمان
+          setTimeout(()=>{ try{ delete window[cbName]; }catch(_){ window[cbName]=undefined; } }, 30000);
+        } else {
+          try{ delete window[cbName]; }catch(_){ window[cbName]=undefined; }
+        }
+        cleaned = true;
       }
 
-      window[cb] = (data)=>{ if(done) return; done = true; cleanup(); resolve(data); };
+      function loadOnce(){
+        params.callback = cbName;
+        let u;
+        try { u = new URL(url); } catch(e){ reject(new Error('Invalid GAS_URL')); return; }
+        Object.entries(params).forEach(([k,v])=> u.searchParams.set(k, v));
 
-      s.onerror = async ()=>{
-        if (done) return;
-        cleanup();
-        if (retryOnce) {
-          try {
-            const res2 = await jsonp(url, params, { timeoutMs, retryOnce:false });
-            resolve(res2);
-            return;
-          } catch(e2){
-            reject(new Error('JSONP failed (after retry)'));
+        const s = document.createElement('script');
+        s.defer = true;
+        s.referrerPolicy = 'no-referrer';
+
+        window[cbName] = (data)=>{ if(cleaned) return; cleanup(true); resolve(data); };
+
+        s.onerror = async ()=>{
+          if (cleaned) return;
+          cleanup(true); // إبقاء no-op
+          if (retryOnce) {
+            // إعادة المحاولة بنفس اسم الـ callback
+            retryOnce = false;
+            loadOnce();
+          } else {
+            reject(new Error('JSONP failed'));
           }
-        } else {
-          reject(new Error('JSONP failed'));
-        }
-      };
+        };
 
-      tmr = setTimeout(()=>{ if (done) return; cleanup(); reject(new Error('JSONP timeout')); }, timeoutMs);
+        tmr = setTimeout(()=>{
+          if (cleaned) return;
+          cleanup(true);
+          if (retryOnce) {
+            retryOnce = false;
+            loadOnce();
+          } else {
+            reject(new Error('JSONP timeout'));
+          }
+        }, timeoutMs);
 
-      s.src = u.toString();
-      (document.head || document.documentElement).appendChild(s);
+        s.src = u.toString();
+        (document.head || document.documentElement).appendChild(s);
+      }
+
+      loadOnce();
     });
   }
 
@@ -271,7 +287,6 @@
 
   function fmt(n){ return Number(n||0).toLocaleString('ar-EG'); }
 
-  // Error banner (ودّي)
   const friendlyErrorId = 'mx-friendly-error';
   function showFriendlyError(msg){
     let el = document.getElementById(friendlyErrorId);
@@ -319,7 +334,6 @@
         </div>
       `).join('');
 
-      // إخفاء رسالة الخطأ إن كانت موجودة
       const errEl = document.getElementById(friendlyErrorId);
       if (errEl) errEl.remove();
 
@@ -331,12 +345,10 @@
     }
   }
 
-  // مؤقّت لا يطلق تحديثًا جديدًا إذا كان هناك تحديث جارٍ
   let timer = setInterval(()=>{ if(!isRefreshing) refresh(); }, AUTO_REFRESH_MS);
 
   document.getElementById('refreshBtn').addEventListener('click', () => {
     if (!isRefreshing) refresh();
-    // لا نعيد إنشاء المؤقّت لتفادي التراكم
   });
 
   // ===== Modal (Quick Add) =====
