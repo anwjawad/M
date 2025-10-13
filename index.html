@@ -149,7 +149,7 @@
 <script>
   // ===== Config =====
   const GAS_URL = 'https://script.google.com/macros/s/AKfycbwL5IahwxEUzKoB9w8aSAZ4jGafdTvtFjVMmwvL6s7Qj1HFcGn2_f2-2IFvdHxH9Z8t8A/exec';
-  const AUTO_REFRESH_MS = 25000;
+  const AUTO_REFRESH_MS = 45000; // لتخفيف الضغط
 
   // ===== Theme =====
   const themeSelect = document.getElementById('themeSelect');
@@ -191,23 +191,17 @@
   }
 
   // ===== JSONP helper (GET) =====
-  // مُحسّن: timeout + محاولة ثانية + رسالة ودّية في الواجهة
   function jsonp(url, params={}, { timeoutMs=9000, retryOnce=true } = {}){
     return new Promise((resolve,reject)=>{
       const cb = 'cb_' + Math.random().toString(36).slice(2);
       params.callback = cb;
 
       let u;
-      try {
-        u = new URL(url);
-      } catch (e) {
-        reject(new Error('Invalid GAS_URL'));
-        return;
-      }
+      try { u = new URL(url); } catch (e) { reject(new Error('Invalid GAS_URL')); return; }
       Object.entries(params).forEach(([k,v])=> u.searchParams.set(k, v));
 
       const s = document.createElement('script');
-      s.defer = true; // لا يؤثر على التنفيذ الفوري للـ JSONP لكنه يساعد التحميل
+      s.defer = true;
       s.referrerPolicy = 'no-referrer';
 
       let done = false;
@@ -215,7 +209,7 @@
 
       function cleanup(){
         if (tmr) clearTimeout(tmr);
-        if (window[cb]) { try { delete window[cb]; } catch(_){ window[cb]=undefined; } }
+        try { delete window[cb]; } catch(_){ window[cb]=undefined; }
         if (s && s.parentNode) s.parentNode.removeChild(s);
       }
 
@@ -225,7 +219,6 @@
         if (done) return;
         cleanup();
         if (retryOnce) {
-          // محاولة ثانية لمرة واحدة فقط
           try {
             const res2 = await jsonp(url, params, { timeoutMs, retryOnce:false });
             resolve(res2);
@@ -238,11 +231,7 @@
         }
       };
 
-      tmr = setTimeout(()=>{
-        if (done) return;
-        cleanup();
-        reject(new Error('JSONP timeout'));
-      }, timeoutMs);
+      tmr = setTimeout(()=>{ if (done) return; cleanup(); reject(new Error('JSONP timeout')); }, timeoutMs);
 
       s.src = u.toString();
       (document.head || document.documentElement).appendChild(s);
@@ -282,7 +271,7 @@
 
   function fmt(n){ return Number(n||0).toLocaleString('ar-EG'); }
 
-  // عنصر رسالة خطأ ودّية
+  // Error banner (ودّي)
   const friendlyErrorId = 'mx-friendly-error';
   function showFriendlyError(msg){
     let el = document.getElementById(friendlyErrorId);
@@ -296,7 +285,10 @@
     el.textContent = msg;
   }
 
+  let isRefreshing = false;
   async function refresh(){
+    if (isRefreshing) return;
+    isRefreshing = true;
     try {
       const summary = await apiGet({ action:'summary' });
       const by = summary.byCat || {};
@@ -309,11 +301,11 @@
       cPersonal.textContent = fmt(by.personal || 0);
       renderPie(by);
 
-      baseSalary.value   = summary.settings.baseSalary || 0;
-      alloc_fixed.value  = summary.settings.alloc_fixed || 0;
-      alloc_variable.value = summary.settings.alloc_variable || 0;
-      alloc_savings.value  = summary.settings.alloc_savings || 0;
-      alloc_personal.value = summary.settings.alloc_personal || 0;
+      baseSalary.value      = summary.settings.baseSalary || 0;
+      alloc_fixed.value     = summary.settings.alloc_fixed || 0;
+      alloc_variable.value  = summary.settings.alloc_variable || 0;
+      alloc_savings.value   = summary.settings.alloc_savings || 0;
+      alloc_personal.value  = summary.settings.alloc_personal || 0;
 
       const tx = await apiGet({ action:'transactions' });
       txList.innerHTML = (tx.data||[]).slice().reverse().map(t => `
@@ -327,20 +319,24 @@
         </div>
       `).join('');
 
-      // في حال كانت هناك رسالة خطأ سابقة وأصبح كل شيء تمام—اخفها
+      // إخفاء رسالة الخطأ إن كانت موجودة
       const errEl = document.getElementById(friendlyErrorId);
       if (errEl) errEl.remove();
 
     } catch (err) {
-      // إظهار رسالة ودّية بدل سبام في الكونسول
       showFriendlyError('تعذر الاتصال بخدمة Google Apps Script. تأكد من رابط النشر وإعدادات الوصول (Web app → Anyone).');
       console.warn('[JSONP]', err?.message || err);
+    } finally {
+      isRefreshing = false;
     }
   }
 
-  let timer = setInterval(refresh, AUTO_REFRESH_MS);
+  // مؤقّت لا يطلق تحديثًا جديدًا إذا كان هناك تحديث جارٍ
+  let timer = setInterval(()=>{ if(!isRefreshing) refresh(); }, AUTO_REFRESH_MS);
+
   document.getElementById('refreshBtn').addEventListener('click', () => {
-    clearInterval(timer); refresh(); timer=setInterval(refresh, AUTO_REFRESH_MS);
+    if (!isRefreshing) refresh();
+    // لا نعيد إنشاء المؤقّت لتفادي التراكم
   });
 
   // ===== Modal (Quick Add) =====
